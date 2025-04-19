@@ -1,37 +1,31 @@
+import openai
+from openai import OpenAI
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import List
+import os
+from dotenv import load_dotenv
 
-from chatbot import get_answer
-from model_trainer import train_model
-from judge import evaluate_model
+load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
 
-# Existing Chatbot route
+class Message(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+
 class ChatRequest(BaseModel):
-    history: List[Dict[str, str]]
+    history: List[Message]
 
 @app.post("/ask")
-def ask_question(request: ChatRequest):
-    reply = get_answer(request.history)
-    return {"response": reply}
-
-# New: Model Training API
-class TrainRequest(BaseModel):
-    model_type: str  # "regression" or "classification"
-
-@app.post("/train_model")
-def train(train_req: TrainRequest):
-    model, X_test, y_test = train_model(model_type=train_req.model_type)
-    return {"message": f"{train_req.model_type.capitalize()} model trained successfully."}
-
-# New: Judge API
-class JudgeRequest(BaseModel):
-    model_type: str
-
-@app.post("/judge_model")
-def judge(judge_req: JudgeRequest):
-    model, X_test, y_test = train_model(model_type=judge_req.model_type)
-    results = evaluate_model(model, X_test, y_test, model_type=judge_req.model_type)
-    return {"evaluation": results}
+def ask_question(chat: ChatRequest):
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[msg.dict() for msg in chat.history]
+        )
+        answer = response.choices[0].message.content
+        return {"answer": answer}
+    except Exception as e:
+        return {"answer": f"Error: {e}"}
